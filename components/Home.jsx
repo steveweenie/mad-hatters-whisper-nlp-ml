@@ -14,14 +14,29 @@ const HomeComponent = () => {
         "why is a raven like a writing desk": "Mad Hatter",
     };
 
-    const handlePredict = () => {
+    // In your Home.jsx component
+    const handlePredict = async () => {
         setLoading(true);
-        setTimeout(() => {
-        const lowerCaseInput = inputText.toLowerCase();
-        const result = samplePredictions[lowerCaseInput] || "Unknown Character";
-        setPrediction(result);
+        try {
+        const response = await fetch('http://10.180.91.15:5000/predict', {
+            method: 'POST',
+            headers: {
+            'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ text: inputText }),
+        });
+        
+        const data = await response.json();
+        if (data.error) {
+            setPrediction(`Error: ${data.error}`);
+        } else {
+            setPrediction(data.character);
+        }
+        } catch (error) {
+        setPrediction("Failed to connect to the server");
+        } finally {
         setLoading(false);
-        }, 1000);
+        }
     };
 
     return (
