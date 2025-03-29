@@ -1,39 +1,41 @@
-import { useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
-import styles from '../styles/homeStyles';
+import { loadPyodide } from 'pyodide';
+import { useEffect, useState } from 'react';
+import { Platform, Pressable, Text, TextInput, View } from 'react-native';
+import modelScript from './model.py?raw'; // Import as raw text
 
-const HomeComponent = () => {
+export default function Home() {
     const [inputText, setInputText] = useState('');
     const [prediction, setPrediction] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [pyodide, setPyodide] = useState(null);
 
-    const samplePredictions = {
-        "off with their heads": "Queen of Hearts",
-        "we're all mad here": "Cheshire Cat",
-        "curiouser and curiouser": "Alice",
-        "why is a raven like a writing desk": "Mad Hatter",
-    };
+    // Initialize Pyodide
+    useEffect(() => {
+        const initPyodide = async () => {
+        const pyodideInstance = await loadPyodide({
+            indexURL: "https://cdn.jsdelivr.net/pyodide/v0.23.4/full/",
+        });
+        await pyodideInstance.loadPackage(['scikit-learn', 'pandas']);
+        setPyodide(pyodideInstance);
+        };
+        initPyodide();
+    }, []);
 
-    // In your Home.jsx component
     const handlePredict = async () => {
+        if (!pyodide) return;
+        
         setLoading(true);
         try {
-        const response = await fetch('http://10.180.91.15:5000/predict', {
-            method: 'POST',
-            headers: {
-            'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ text: inputText }),
-        });
+        // Inject Python script
+        await pyodide.runPythonAsync(modelScript);
         
-        const data = await response.json();
-        if (data.error) {
-            setPrediction(`Error: ${data.error}`);
-        } else {
-            setPrediction(data.character);
-        }
+        // Call prediction function
+        const result = await pyodide.runPythonAsync(`
+            predict_character("${inputText.replace(/"/g, '\\"')}")
+        `);
+        setPrediction(result);
         } catch (error) {
-        setPrediction("Failed to connect to the server");
+        setPrediction(`Error: ${error.message}`);
         } finally {
         setLoading(false);
         }
@@ -41,34 +43,15 @@ const HomeComponent = () => {
 
     return (
         <View style={styles.container}>
-        <Text style={styles.title}>Mad Hatter's Whisper: Speech Classifier</Text>
-        
-        <TextInput
-            style={styles.input}
-            placeholder="Type a line from Alice in Wonderland..."
+        <TextInput 
             value={inputText}
             onChangeText={setInputText}
-            multiline
+            placeholder="Enter Wonderland dialogue..."
         />
-        
-        <Pressable 
-            style={styles.button} 
-            onPress={handlePredict}
-            disabled={loading}
-        >
-            <Text style={styles.buttonText}>
-            {loading ? "Thinking..." : "Predict Character"}
-            </Text>
+        <Pressable onPress={handlePredict}>
+            <Text>{loading ? "Thinking..." : "Predict"}</Text>
         </Pressable>
-        
-        {prediction && (
-            <View style={styles.resultContainer}>
-            <Text style={styles.resultText}>This sounds like:</Text>
-            <Text style={styles.characterText}>{prediction}</Text>
-            </View>
-        )}
+        {prediction && <Text>Character: {prediction}</Text>}
         </View>
     );
-    };
-
-export default HomeComponent;
+}
